@@ -13,4 +13,4 @@ app.include_router(api_router)
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to My FastAPI App!"}
+    return {"message": "API for the DAS Homework"}
