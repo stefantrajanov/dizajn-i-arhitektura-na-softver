@@ -5,24 +5,36 @@ import numpy as np
 router = APIRouter()
 data = pd.read_csv('app/data-formatted.csv')
 
-# def string_to_float(column):
-#     if column == 'DATE':
-#         return data[column]
-#     if column == 'TOTAL REVENUE IN DENARS':
-#         data[column] = data['TOTAL REVENUE IN DENARS'].str.replace('.', '').astype(float)
-#         return data[column]
-#     try:
-#         data[column] = data[column].str.replace(',', '.')
-#         data[column] = data[column].str.replace('.', '', 1)
-#         data[column] = data[column].astype(float)
-#     except:
-#         return data[column]
-#     return data[column]
-# data.apply(lambda x: string_to_float(x.name))
+# Function to resample data for timeframes
+def resample_data(data, timeframe):
+    data["DATE"] = pd.to_datetime(data["DATE"])  # Ensure DATE is in datetime format
+    data = data.set_index("DATE")  # Set DATE as the index
+
+    # Select only numeric columns for resampling
+    numeric_columns = data.select_dtypes(include=["number"]).columns
+    non_numeric_columns = data.select_dtypes(exclude=["number"]).columns
+
+    if timeframe == "1D":
+        resampled_data = data[numeric_columns].asfreq("D").fillna(method="ffill")
+    elif timeframe == "1W":
+        resampled_data = data[numeric_columns].resample("W").mean().fillna(0)
+    elif timeframe == "1M":
+        resampled_data = data[numeric_columns].resample("M").mean().fillna(0)
+    else:
+        raise ValueError("Invalid timeframe. Choose '1D', '1W', or '1M'.")
+
+    # Reset the index to bring DATE back as a column
+    resampled_data = resampled_data.reset_index()
+
+    # Reattach non-numeric columns (e.g., COMPANY)
+    if not non_numeric_columns.empty:
+        non_numeric_data = data[non_numeric_columns].reset_index().drop_duplicates(subset="DATE")
+        resampled_data = resampled_data.merge(non_numeric_data, on="DATE", how="left")
+
+    return resampled_data
 
 # Function to calculate technical indicators
 def calculate_technical_indicators(data, column="PRICE OF LAST TRANSACTION"):
-    # Ensure data is sorted by date
     data = data.sort_values(by="DATE").reset_index(drop=True)
 
     # Oscillators
@@ -61,45 +73,75 @@ def calculate_technical_indicators(data, column="PRICE OF LAST TRANSACTION"):
 
     return data, oscillators_meter, moving_averages_meter
 
-# Example API route
+
 @router.get("/stock-data/{ticker}")
 async def get_stock_data(ticker: str):
-    # Replace this with your actual data loading logic
-    # Assuming `data` is a DataFrame loaded from a CSV or database
-    stock_data = data[data["COMPANY"] == ticker]  # Filter data for the ticker
+    print(f"Fetching data for ticker: {ticker}")
 
+    stock_data = data[data["COMPANY"] == ticker]
     if stock_data.empty:
+        print("No data found for the given ticker.")
         return {"error": "Ticker not found"}
 
-    # Calculate indicators and meters
-    stock_data, oscillators_meter, moving_averages_meter = calculate_technical_indicators(stock_data)
-    stock_data.fillna(0, inplace=True)
+    # Process for each timeframe
+    timeframes = ["1D", "1W", "1M"]
+    timeframe_results = {}
+    for timeframe in timeframes:
+        try:
+            resampled_data = resample_data(stock_data, timeframe)
+
+            # Replace NaN/Inf/-Inf in resampled data
+            resampled_data.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
+
+            indicators_data, oscillators_meter, moving_averages_meter = calculate_technical_indicators(resampled_data)
+
+            # Replace NaN/Inf/-Inf in indicators_data
+            indicators_data.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
+
+            timeframe_results[timeframe] = {
+                "GraphData": indicators_data[["DATE", "PRICE OF LAST TRANSACTION"]].to_dict(orient="records"),
+                "Oscillators": {
+                    "RSI": indicators_data["RSI"].iloc[-1],
+                    "MACD": indicators_data["MACD"].iloc[-1],
+                    "Stochastic Oscillator": indicators_data["Stochastic"].iloc[-1],
+                    "Williams %R": indicators_data["Williams %R"].iloc[-1],
+                    "Rate of Change": indicators_data["ROC"].iloc[-1],
+                    "METER": oscillators_meter,
+                },
+                "Moving Averages": {
+                    "SMA10": indicators_data["SMA10"].iloc[-1],
+                    "EMA10": indicators_data["EMA10"].iloc[-1],
+                    "SMA20": indicators_data["SMA20"].iloc[-1],
+                    "EMA20": indicators_data["EMA20"].iloc[-1],
+                    "SMA50": indicators_data["SMA50"].iloc[-1],
+                    "METER": moving_averages_meter,
+                },
+            }
+        except Exception as e:
+            print(f"Error processing timeframe {timeframe}: {e}")
+            timeframe_results[timeframe] = {"error": str(e)}
+
+    # Replace NaN/Inf/-Inf in stock_data
+    stock_data.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
+
     # Construct response
     response = {
         "Ticker": ticker,
         "Company Name": stock_data["COMPANY"].iloc[0],
-        "Current Price": stock_data[stock_data["DATE"].max() == stock_data["DATE"]]["PRICE OF LAST TRANSACTION"].iloc[0],
-        "MAX Price": stock_data["MAX"].max(),
-        "MIN Price": stock_data["MIN"].min(),
-        "Volume": stock_data["QUANTITY"].sum(),
-        "REVENUE": stock_data["REVENUE IN BEST DENARS"].sum(),
-        "AVERAGE PRICE": stock_data[stock_data["DATE"].max() == stock_data["DATE"]]["AVERAGE PRICE"].iloc[0],
-        "Oscillators": {
-            "RSI": stock_data["RSI"].iloc[-1],
-            "MACD": stock_data["MACD"].iloc[-1],
-            "Stochastic Oscillator": stock_data["Stochastic"].iloc[-1],
-            "Williams %R": stock_data["Williams %R"].iloc[-1],
-            "Rate of Change": stock_data["ROC"].iloc[-1],
-            "METER": oscillators_meter,
-        },
-        "Moving Averages": {
-            "SMA10": stock_data["SMA10"].iloc[-1],
-            "EMA10": stock_data["EMA10"].iloc[-1],
-            "SMA20": stock_data["SMA20"].iloc[-1],
-            "EMA20": stock_data["EMA20"].iloc[-1],
-            "SMA50": stock_data["SMA50"].iloc[-1],
-            "METER": moving_averages_meter,
-        },
+        "Current Price": stock_data["PRICE OF LAST TRANSACTION"].iloc[-1],
+        "MAX Price": stock_data["PRICE OF LAST TRANSACTION"].max(),
+        "MIN Price": stock_data["PRICE OF LAST TRANSACTION"].min(),
+        "Volume": stock_data["QUANTITY"].sum() if "QUANTITY" in stock_data.columns else None,
+        "REVENUE": stock_data[
+            "REVENUE IN BEST DENARS"].sum() if "REVENUE IN BEST DENARS" in stock_data.columns else None,
+        "AVERAGE PRICE": stock_data["PRICE OF LAST TRANSACTION"].mean(),
+        "Timeframes": timeframe_results,
+    }
+
+    # Ensure JSON compliance
+    response = {
+        key: (float(value) if isinstance(value, (np.float64, np.int64)) else value)
+        for key, value in response.items()
     }
 
     return response
