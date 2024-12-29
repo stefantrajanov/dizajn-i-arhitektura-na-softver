@@ -1,0 +1,131 @@
+<div title="Back to Menu" class="backArrow" (click)="goBack()">
+    &#10140;
+</div>
+
+
+<div class="info-container">
+    <h1>Selected Stock: {{ companyName }}</h1>
+    <h2>Current Price: {{ currentPrice }} MKD</h2>
+    <h2>All time high: {{ allTimeHigh }} MKD</h2>
+    <h2>All time low: {{ allTimeLow }} MKD</h2>
+    <h2>Average Price: {{ averagePrice }} MKD</h2>
+    <h2>Total revenue generated: {{ revenueGenerated }} MKD</h2>
+    <br>
+    <h1 class="important">UPCOMING PREDICTED PRICE: {{ pricePredictionFromModel }} MKD</h1>
+    <h1 class="important">EVALUATION BASED ON CURRENT LATEST NEWS: {{ buyOrSellPredictionFromModel }}</h1>
+</div>
+
+
+<div class="time-frame-container">
+    <button [ngClass]="{ 'active' : timeFrame=='1D' }" (click)="changeTimeFrame('1D')" >1 day</button>
+    <button [ngClass]="{ 'active' : timeFrame=='1W' }" (click)="changeTimeFrame('1W')" >1 week</button>
+    <button [ngClass]="{ 'active' : timeFrame=='1M' }" (click)="changeTimeFrame('1M')" >1 month</button>
+</div>
+
+<div class="signals">
+    <!-- In some parent component’s template -->
+    <app-speedometer
+            *ngIf="!refresh"
+            [value]="getGaugeValue(oscillatorSIGNAL)"
+            [maxValue]="100"
+            [size]="250"
+            [strokeWidth]="20"
+            [label]="oscillatorSIGNAL"
+    >
+    </app-speedometer>
+    <app-speedometer
+            *ngIf="!refresh"
+            [value]="getGaugeValue(getSummary())"
+            [maxValue]="100"
+            [size]="250"
+            [strokeWidth]="20"
+            [label]="getSummary()"
+    >
+    </app-speedometer>
+    <app-speedometer
+            *ngIf="!refresh"
+            [value]="getGaugeValue(maSIGNAL)"
+            [maxValue]="100"
+            [size]="250"
+            [strokeWidth]="20"
+            [label]="maSIGNAL"
+    >
+    </app-speedometer>
+</div>
+
+<div class="tables-container">
+    <div>
+        <h2>Oscillators</h2>
+        <table class="table-one">
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Value</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>Relative Strength Index</td>
+                <td>{{ rsiValue }}</td>
+            </tr>
+            <tr>
+                <td>MACD</td>
+                <td>{{ macdValue }}</td>
+            </tr>
+            <tr>
+                <td>Stochastic</td>
+                <td>{{ stochValue }}</td>
+            </tr>
+            <tr>
+                <td>Williams %R</td>
+                <td>{{ williamsValue }}</td>
+            </tr>
+            <tr>
+                <td>Rate of Change</td>
+                <td>{{ rateOfChangeValue }}</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <!-- Second Table -->
+    <div>
+        <h2>Moving Averages</h2>
+        <table class="table-two">
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>Simple Moving Average (10)</td>
+                <td>{{ sma10 }}</td>
+            </tr>
+            <tr>
+                <td>Exponential Moving Average (10)</td>
+                <td>{{ ema10 }}</td>
+            </tr>
+            <tr>
+                <td>Simple Moving Average (20)</td>
+                <td>{{ sma20 }}</td>
+            </tr>
+            <tr>
+                <td>Exponential Moving Average (20)</td>
+                <td>{{ ema20 }}</td>
+            </tr>
+            <tr>
+                <td>Simple Moving Average (50)</td>
+                <td>{{ sma50 }}</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<highcharts-chart
+        [Highcharts]="Highcharts"
+        [options]="chartOptions"
+        style="width: 100%; display: block;">
+</highcharts-chart>
