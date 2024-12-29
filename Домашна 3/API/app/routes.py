@@ -106,7 +106,7 @@ def preprocess_and_predict(input_data, model_path):
     # Denormalize predictions if necessary
     predictions_denormalized = predictions * max_value
 
-    return predictions_denormalized * 10
+    return predictions_denormalized
 
 # Function to resample data for timeframes
 def resample_data(data, timeframe):
