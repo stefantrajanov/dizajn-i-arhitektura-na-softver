@@ -1,0 +1,55 @@
+$blue-color: #428ecc;
+
+.header {
+  text-align: center;
+  border-bottom: 1px solid black;
+}
+
+.highlight{
+  color: $blue-color;
+}
+
+a {
+  text-decoration: none;
+  color: black;
+}
+
+.main {
+  display: flex;
+  margin: 20px;
+  align-items: center;
+  justify-content: center;
+
+  .info{
+    width: 50%;
+    h1 {
+      font-size: 72px;
+    }
+    p {
+      font-size: 20px;
+      width: 75%;
+    }
+  }
+
+  div {
+    margin: 20px
+  }
+
+  .companies{
+    text-align: center;
+    margin-top: 150px;
+  }
+
+  a {
+    background-color: darkblue;
+    color: white;
+    padding: 10px;
+    border-radius: 15px;
+  }
+
+  img {
+    height: 100px;
+    display: inline-block;
+    margin: 20px;
+  }
+}
