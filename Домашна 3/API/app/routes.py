@@ -1,9 +1,112 @@
 from fastapi import APIRouter
 import pandas as pd
 import numpy as np
-
+import numpy as np
+from keras.models import load_model
+import requests
+from bs4 import BeautifulSoup
+from transformers import AutoTokenizer, TFAutoModelForSequenceClassification, pipeline
+import logging
+from transformers import logging as transformers_logging
 router = APIRouter()
 data = pd.read_csv('app/data-formatted.csv')
+model = load_model('ai-models/lstm_model.h5')
+
+def getBerzaNews(symbol):
+    url = f'https://www.mse.mk/mk/symbol/{symbol}'
+    response = requests.get(url)
+    content = BeautifulSoup(response.text, 'lxml')
+
+    # finding links to news
+    aElements = content.find_all('a', href=True)
+    newsLinks = [link['href'] for link in aElements if link['href'].startswith('/mk/news')]
+
+    news = []
+    for link in newsLinks:
+        response = requests.get(f'https://www.mse.mk{link}')
+        content = BeautifulSoup(response.text, 'lxml')
+        try:
+            # print(content.find(id='content').text)
+            # print('-----------------------------------')
+            news.append(content.find(id='content').text)
+        except Exception as e:
+            continue
+
+    return news
+
+
+# Load a multilingual model
+def analyzeSentiment(symbol):
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    transformers_logging.set_verbosity_error()
+    model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = TFAutoModelForSequenceClassification.from_pretrained(model_name)  # Use TF equivalent class
+
+    # Create a pipeline
+    sentiment_analysis = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, framework="tf")
+
+    # Analyze sentiment
+    texts = getBerzaNews(symbol)
+
+    scores = []
+    for text in texts:
+        try:
+            result = sentiment_analysis(text)
+            # print(f"Sentiment: {result[0]['score']}")
+            scores.append(result[0]['score'])
+        except Exception as e:
+            continue
+
+    if not scores:
+        return 'No news for ' + symbol
+
+    avg = sum(scores) / len(scores)
+    if avg > 0.55:
+        return 'Buy'
+    else:
+        return 'Sell'
+
+
+def preprocess_and_predict(input_data, model_path):
+    input_data = input_data.drop(columns=['COMPANY', 'DATE', 'PRICE OF LAST TRANSACTION'])
+    """
+    Preprocess input data and predict the price using a pre-trained LSTM model.
+
+    Args:
+        input_data (pd.DataFrame): Input dataset for prediction.
+        model_path (str): Path to the trained model file.
+
+    Returns:
+        np.array: Predicted prices.
+    """
+    # Load the pre-trained model
+    timesteps = model.input_shape[1]
+    features = model.input_shape[2]
+
+    # Ensure input_data has the correct number of features
+    input_data = input_data.iloc[:, :features]
+
+    # Handle missing values and normalize
+    input_data = input_data.fillna(0)
+    max_value = input_data.max().max()
+    input_data_normalized = input_data / max_value
+
+    # Check if there are enough rows for timesteps
+    if len(input_data) < timesteps:
+        raise ValueError(f"Input data must have at least {timesteps} rows for prediction.")
+
+    # Reshape the data
+    input_data_reshaped = np.array([input_data_normalized.values[-timesteps:]])
+    input_data_reshaped = input_data_reshaped.reshape(1, timesteps, features)
+
+    # Predict
+    predictions = model.predict(input_data_reshaped)
+
+    # Denormalize predictions if necessary
+    predictions_denormalized = predictions * max_value
+
+    return predictions_denormalized * 10
 
 # Function to resample data for timeframes
 def resample_data(data, timeframe):
@@ -32,6 +135,7 @@ def resample_data(data, timeframe):
         resampled_data = resampled_data.merge(non_numeric_data, on="DATE", how="left")
 
     return resampled_data
+
 
 # Function to calculate technical indicators
 def calculate_technical_indicators(data, column="PRICE OF LAST TRANSACTION"):
@@ -74,6 +178,8 @@ def calculate_technical_indicators(data, column="PRICE OF LAST TRANSACTION"):
     return data, oscillators_meter, moving_averages_meter
 
 
+
+
 @router.get("/stock-data/{ticker}")
 async def get_stock_data(ticker: str):
     print(f"Fetching data for ticker: {ticker}")
@@ -98,7 +204,14 @@ async def get_stock_data(ticker: str):
             # Replace NaN/Inf/-Inf in indicators_data
             indicators_data.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
 
+            price_prediction = preprocess_and_predict(indicators_data, 'ai-models/lstm_model.h5')
+
+            market_news_evaluation = analyzeSentiment(ticker)
+
+
             timeframe_results[timeframe] = {
+                "Price Prediction": price_prediction[0][0],
+                "Market News Evaluation": market_news_evaluation,
                 "GraphData": indicators_data[["DATE", "PRICE OF LAST TRANSACTION"]].to_dict(orient="records"),
                 "Oscillators": {
                     "RSI": indicators_data["RSI"].iloc[-1],
@@ -124,17 +237,20 @@ async def get_stock_data(ticker: str):
     # Replace NaN/Inf/-Inf in stock_data
     stock_data.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
 
+    # reverse stock data
+    stock_data = stock_data.iloc[::-1]
+
     # Construct response
     response = {
         "Ticker": ticker,
         "Company Name": stock_data["COMPANY"].iloc[0],
-        "Current Price": stock_data["PRICE OF LAST TRANSACTION"].iloc[-1],
+        "Current Price": stock_data["AVERAGE PRICE"].iloc[-1],
         "MAX Price": stock_data["PRICE OF LAST TRANSACTION"].max(),
         "MIN Price": stock_data["PRICE OF LAST TRANSACTION"].min(),
         "Volume": stock_data["QUANTITY"].sum() if "QUANTITY" in stock_data.columns else None,
         "REVENUE": stock_data[
             "REVENUE IN BEST DENARS"].sum() if "REVENUE IN BEST DENARS" in stock_data.columns else None,
-        "AVERAGE PRICE": stock_data["PRICE OF LAST TRANSACTION"].mean(),
+        "AVERAGE PRICE": stock_data["AVERAGE PRICE"].iloc[-1],
         "Timeframes": timeframe_results,
     }
 
