@@ -1,0 +1,8 @@
+<div class="container">
+  <h1>Choose a stock</h1>
+  <input id="search" type="text" placeholder="Example: ALK" #searchInput>
+  <ul class="drop"></ul>
+  <div>
+    <button (click)="getStockData(searchInput.value)">GET DATA</button>
+  </div>
+</div>

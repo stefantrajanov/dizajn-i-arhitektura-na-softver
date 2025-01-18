@@ -1,0 +1,44 @@
+<div
+        class="speedometer-container"
+        [style.width.px]="size"
+        [style.height.px]="size / 2"
+>
+    <svg
+            [attr.width]="size"
+            [attr.height]="size"
+            [attr.viewBox]="'0 0 ' + size + ' ' + size"
+            class="speedometer-gauge"
+    >
+        <!-- BACKGROUND ARC -->
+        <circle
+                class="gauge-bg"
+                [attr.cx]="size / 2"
+                [attr.cy]="size / 2"
+                [attr.r]="radius"
+                [attr.stroke-width]="strokeWidth"
+                fill="none"
+                stroke="#ddd"
+                [attr.stroke-dasharray]="halfCircumference + ',' + circumference"
+                [attr.transform]="'rotate(180 ' + size / 2 + ' ' + size / 2 + ')'"
+        ></circle>
+
+        <!-- FOREGROUND ARC (the "value" fill) -->
+        <circle
+                class="gauge-fill"
+                [attr.cx]="size / 2"
+                [attr.cy]="size / 2"
+                [attr.r]="radius"
+                [attr.stroke-width]="strokeWidth"
+                fill="none"
+                stroke="#007bff"
+                [attr.stroke-dasharray]="halfCircumference + ',' + circumference"
+                [attr.stroke-dashoffset]="dashOffset"
+                [attr.transform]="'rotate(180 ' + size / 2 + ' ' + size / 2 + ')'"
+        ></circle>
+    </svg>
+
+    <!-- The numeric value in the center (optional) -->
+    <div class="speedometer-value" [ngStyle]="{'color' : label.includes('BUY') ? 'blue' : 'red'}" >
+        {{ label }}
+    </div>
+</div>
